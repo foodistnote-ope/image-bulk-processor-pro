@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像一括リサイズツール</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --accent: #5b5bd6;
+            --accent-light: #7c7ce8;
+            --accent-bg: #ededfc;
+            --success: #1a7f52;
+            --success-bg: #d3f4e8;
+            --warning: #b45309;
+            --warning-bg: #fef3c7;
+            --danger: #c0392b;
+            --text: #1e1e2e;
+            --muted: #6b728e;
+            --border: #d0d4e8;
+            --bg: #f4f5fb;
+            --surface: #ffffff;
+            --radius: 14px;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', 'Hiragino Sans', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 36px 16px 60px;
+        }
+
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 28px;
+            text-align: center;
+        }
+
+        /* ---- Drop Zone ---- */
+        #drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 44px 24px;
+            text-align: center;
+            cursor: pointer;
+            background: var(--surface);
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 20px;
+        }
+
+        #drop-zone:hover,
+        #drop-zone.drag-over {
+            border-color: var(--accent-light);
+            background: var(--accent-bg);
+        }
+
+        #drop-zone .dz-main {
+            font-size: 1.05rem;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        #drop-zone .dz-sub {
+            font-size: 0.82rem;
+            color: #a0a5bb;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        #selected-info {
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-weight: 600;
+            margin-top: 10px;
+            min-height: 20px;
+            text-align: center;
+        }
+
+        /* ---- Section label ---- */
+        .section-label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--muted);
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        /* ---- Resize Options ---- */
+        .resize-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1.5px solid var(--border);
+            background: var(--bg);
+            transition: border-color 0.15s, background 0.15s;
+            user-select: none;
+        }
+
+        .radio-option:hover {
+            border-color: var(--accent-light);
+            background: var(--accent-bg);
+        }
+
+        .radio-option.selected {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        /* Custom radio circle */
+        .radio-circle {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.15s;
+        }
+
+        .radio-option.selected .radio-circle {
+            border-color: var(--accent);
+        }
+
+        .radio-circle::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .radio-option.selected .radio-circle::after {
+            opacity: 1;
+        }
+
+        .radio-text {
+            font-size: 0.92rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        /* Hide actual radio */
+        .radio-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Custom width input */
+        #custom-width-wrap {
+            display: none;
+            margin-top: 10px;
+            padding: 10px 14px;
+            background: var(--accent-bg);
+            border-radius: 10px;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #custom-width-wrap.visible {
+            display: flex;
+        }
+
+        #custom-width-wrap label {
+            font-size: 0.88rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        #custom-width {
+            width: 100px;
+            padding: 7px 12px;
+            border: 1.5px solid var(--accent-light);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: var(--text);
+            background: #fff;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        #custom-width:focus {
+            border-color: var(--accent);
+        }
+
+        #custom-width-wrap span {
+            font-size: 0.88rem;
+            color: var(--muted);
+        }
+
+        /* ---- Process Button (hidden, used internally) ---- */
+        #process-btn {
+            display: none;
+        }
+
+        /* ---- Progress ---- */
+        #progress-section {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        .progress-track {
+            background: #e8eaf6;
+            border-radius: 99px;
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 99px;
+            transition: width 0.3s ease;
+        }
+
+        #progress-text {
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        /* ---- Results ---- */
+        #results-section {
+            display: none;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+        }
+
+
+        #zip-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 18px;
+            background: var(--accent-bg);
+            border: 1.5px solid var(--accent-light);
+            border-radius: 9px;
+            color: var(--accent);
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: background 0.15s, box-shadow 0.15s;
+        }
+
+        #zip-btn:hover {
+            background: #dcdcf8;
+            box-shadow: 0 2px 8px rgba(91, 91, 214, 0.15);
+        }
+
+        #zip-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .result-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .result-item {
+            display: grid;
+            grid-template-columns: 54px 1fr auto auto;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+        }
+
+        .thumb {
+            width: 50px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: var(--border);
+            flex-shrink: 0;
+        }
+
+        .file-info {
+            min-width: 0;
+        }
+
+        .file-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-meta {
+            font-size: 0.73rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .size-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 99px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .size-ok {
+            background: var(--success-bg);
+            color: var(--success);
+        }
+
+        .size-warn {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+
+        .dl-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 13px;
+            background: white;
+            border: 1.5px solid var(--accent-light);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background 0.13s;
+        }
+
+        .dl-btn:hover {
+            background: var(--accent-bg);
+        }
+
+        .error-item {
+            grid-column: 1 / -1;
+            font-size: 0.85rem;
+            color: var(--danger);
+        }
+
+        @media (max-width: 500px) {
+            h1 {
+                font-size: 1.35rem;
+            }
+
+            .result-item {
+                grid-template-columns: 44px 1fr;
+                grid-template-rows: auto auto;
+            }
+
+            .size-badge {
+                grid-column: 2;
+            }
+
+            .dl-btn {
+                grid-column: 2;
+            }
+        }
+
+        /* ---- Reset Button ---- */
+        #reset-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            margin-top: 16px;
+            margin-left: auto;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 99px;
+            color: var(--muted);
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
+            transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+        }
+
+        #reset-btn:hover {
+            background: #f0f0fc;
+            color: var(--accent);
+            box-shadow: 0 4px 16px rgba(91, 91, 214, 0.15);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <h1>画像一括リサイズツール</h1>
+
+        <!-- Drop Zone -->
+        <div id="drop-zone">
+            <p class="dz-main">ここに画像をドラッグ＆ドロップ、またはクリックして選択</p>
+            <p class="dz-sub" id="dz-sub-text">変換設定: 横幅1200px | 100KB以下 | JPG形式</p>
+            <input type="file" id="file-input" multiple accept="image/*">
+        </div>
+        <div id="selected-info"></div>
+
+        <!-- Resize Options -->
+        <div class="resize-card" style="margin-top:18px;">
+            <div class="section-label">リサイズ設定</div>
+            <div class="radio-group" id="resize-group">
+
+                <label class="radio-option selected" data-value="1200">
+                    <input type="radio" name="resize" value="1200" checked>
+                    <div class="radio-circle"></div>
+                    <span class="radio-text">横幅 1200px（縦はアスペクト比維持）</span>
+                </label>
+
+                <label class="radio-option" data-value="640">
+                    <input type="radio" name="resize" value="640">
+                    <div class="radio-circle"></div>
+                    <span class="radio-text">横幅 640px（縦はアスペクト比維持）</span>
+                </label>
+
+                <label class="radio-option" data-value="custom">
+                    <input type="radio" name="resize" value="custom">
+                    <div class="radio-circle"></div>
+                    <span class="radio-text">横幅を自由指定</span>
+                </label>
+
+                <div id="custom-width-wrap">
+                    <label for="custom-width">横幅:</label>
+                    <input type="number" id="custom-width" min="1" max="9999" value="800">
+                    <span>px</span>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Process Button -->
+        <button id="process-btn" disabled>⚡ 処理を開始</button>
+
+
+        <!-- Results -->
+        <div id="results-section">
+            <button id="zip-btn">⬇ ZIPで一括ダウンロード</button>
+            <div class="result-list" id="result-list"></div>
+        </div>
+
+        <button id="reset-btn">↺ リセット</button>
+
+    </div><!-- /container -->
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <script>
+        'use strict';
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const selInfo = document.getElementById('selected-info');
+        const dzSub = document.getElementById('dz-sub-text');
+        const processBtn = document.getElementById('process-btn');
+        const resultsSec = document.getElementById('results-section');
+        const resultList = document.getElementById('result-list');
+        const zipBtn = document.getElementById('zip-btn');
+        const customWrap = document.getElementById('custom-width-wrap');
+        const customWidthInput = document.getElementById('custom-width');
+
+        const TARGET_KB = 100;
+        const MIN_QUALITY = 0.5;
+        const QUALITY_STEP = 0.05;
+
+        let selectedFiles = [];
+        let processedItems = [];
+
+        // ===== Drag & Drop =====
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            setFiles([...e.dataTransfer.files].filter(f => f.type.startsWith('image/')));
+        });
+        fileInput.addEventListener('change', () => setFiles([...fileInput.files]));
+
+        function setFiles(files) {
+            selectedFiles = files;
+            if (files.length === 0) {
+                selInfo.textContent = '';
+                return;
+            }
+            selInfo.textContent = '';
+            resultsSec.style.display = 'none';
+            resultList.innerHTML = '';
+            processedItems = [];
+            // アップロード後に自動処理開始
+            startProcessing();
+        }
+
+        // ===== Custom Radio Buttons =====
+        const radioOptions = document.querySelectorAll('.radio-option');
+
+        radioOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                // Update visual state
+                radioOptions.forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+
+                // Check the hidden radio
+                const radio = option.querySelector('input[type="radio"]');
+                radio.checked = true;
+
+                const val = option.dataset.value;
+
+                // Toggle custom width panel
+                if (val === 'custom') {
+                    customWrap.classList.add('visible');
+                } else {
+                    customWrap.classList.remove('visible');
+                }
+
+                // Update drop zone hint text
+                updateDzHint(val);
+            });
+        });
+
+        function updateDzHint(val) {
+            let label = val === 'custom'
+                ? `横幅カスタム指定`
+                : `横幅${val}px (固定)`;
+            dzSub.textContent = `変換設定: ${label} | 100KB以下 | JPG形式`;
+        }
+
+        // ===== Get target width =====
+        function getTargetWidth() {
+            const val = document.querySelector('.radio-option.selected').dataset.value;
+            if (val === 'custom') {
+                const n = parseInt(customWidthInput.value, 10);
+                return (isNaN(n) || n < 1) ? 800 : n;
+            }
+            return parseInt(val, 10);
+        }
+
+        // ===== Core Image Processing =====
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+                img.onerror = reject;
+                img.src = url;
+            });
+        }
+
+        function resizeAndConvert(img, targetWidth) {
+            const scale = targetWidth / img.naturalWidth;
+            const w = targetWidth;
+            const h = Math.round(img.naturalHeight * scale);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            // White background for PNG transparency
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            return { canvas, w, h };
+        }
+
+        function canvasToBlob(canvas, quality) {
+            return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+        }
+
+        async function compressToTarget(canvas, targetBytes) {
+            let quality = 1.0;
+            let bestBlob = null;
+
+            while (quality >= MIN_QUALITY - 0.001) {
+                const blob = await canvasToBlob(canvas, quality);
+                if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
+                if (blob.size <= targetBytes) return { blob, quality };
+                quality = Math.round((quality - QUALITY_STEP) * 100) / 100;
+            }
+            return { blob: bestBlob, quality: MIN_QUALITY };
+        }
+
+        function changeExt(filename) {
+            return filename.replace(/\.[^.]+$/, '') + '.jpg';
+        }
+
+        function fmtSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // ===== Process =====
+        processBtn.addEventListener('click', () => startProcessing());
+
+        async function startProcessing() {
+            if (selectedFiles.length === 0) return;
+
+            const targetWidth = getTargetWidth();
+            const targetBytes = TARGET_KB * 1024;
+
+            processBtn.disabled = true;
+            resultsSec.style.display = 'none';
+            resultList.innerHTML = '';
+            processedItems = [];
+
+            const total = selectedFiles.length;
+            let done = 0;
+
+            for (const file of selectedFiles) {
+
+                try {
+                    const img = await loadImage(file);
+                    const { canvas, w, h } = resizeAndConvert(img, targetWidth);
+                    const { blob, quality } = await compressToTarget(canvas, targetBytes);
+                    const outName = changeExt(file.name);
+                    const url = URL.createObjectURL(blob);
+
+                    processedItems.push({
+                        name: outName, blob, url,
+                        origSize: file.size, finalSize: blob.size,
+                        finalQuality: quality, width: w, height: h,
+                        origWidth: img.naturalWidth
+                    });
+                } catch (err) {
+                    console.error('処理エラー:', file.name, err);
+                    processedItems.push({ name: file.name, error: true });
+                }
+
+                done++;
+            }
+
+            renderResults(total);
+        }
+
+        // ===== Render Results =====
+        function renderResults(total) {
+            resultsSec.style.display = 'block';
+
+            const ok = processedItems.filter(i => !i.error);
+            const totalOrigBytes = ok.reduce((s, i) => s + i.origSize, 0);
+            const totalFinalBytes = ok.reduce((s, i) => s + i.finalSize, 0);
+            const saved = totalOrigBytes > 0
+                ? ((1 - totalFinalBytes / totalOrigBytes) * 100).toFixed(1)
+                : '0.0';
+
+
+            processedItems.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'result-item';
+
+                if (item.error) {
+                    row.innerHTML = `<div class="error-item">❌ エラー: ${escHtml(item.name)}</div>`;
+                    resultList.appendChild(row);
+                    return;
+                }
+
+                const under100 = item.finalSize <= TARGET_KB * 1024;
+                const sizeClass = under100 ? 'size-ok' : 'size-warn';
+                const sizeLabel = `${(item.finalSize / 1024).toFixed(1)} KB`;
+
+                row.innerHTML = `
+      <img class="thumb" src="${item.url}" alt="${escHtml(item.name)}">
+      <div class="file-info">
+        <div class="file-name">${escHtml(item.name)}</div>
+        <div class="file-meta">横幅: ${item.origWidth}px → ${item.width}px &nbsp;|&nbsp; 容量: ${fmtSize(item.origSize)} → ${fmtSize(item.finalSize)}</div>
+      </div>
+      <span class="size-badge ${sizeClass}">${sizeLabel}</span>
+      <button class="dl-btn" data-idx="${idx}">⬇ ダウンロード</button>
+    `;
+                resultList.appendChild(row);
+            });
+
+            resultList.querySelectorAll('.dl-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const item = processedItems[parseInt(btn.dataset.idx)];
+                    if (!item || item.error) return;
+                    const a = document.createElement('a');
+                    a.href = item.url;
+                    a.download = item.name;
+                    a.click();
+                });
+            });
+        }
+
+        function escHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ===== ZIP Download =====
+        zipBtn.addEventListener('click', async () => {
+            const ok = processedItems.filter(i => !i.error);
+            if (ok.length === 0) return;
+
+            zipBtn.disabled = true;
+            zipBtn.textContent = '⏳ ZIP生成中...';
+
+            try {
+                const zip = new JSZip();
+                for (const item of ok) {
+                    zip.file(item.name, item.blob);
+                }
+                const content = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
+                saveAs(content, `images_${Date.now()}.zip`);
+            } catch (e) {
+                alert('ZIP生成に失敗しました: ' + e.message);
+            }
+
+            zipBtn.disabled = false;
+            zipBtn.innerHTML = '⬇ ZIPで一括ダウンロード';
+        });
+
+        // ===== Reset =====
+        document.getElementById('reset-btn').addEventListener('click', () => location.reload());
+    </script>
+</body>
+
+</html>
