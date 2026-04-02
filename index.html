@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>画像一括リサイズツール</title>
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg stroke='%235b5bd6' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cline x1='16' y1='16' x2='28' y2='16'/%3E%3Cpolyline points='24,12 28,16 24,20'/%3E%3Cline x1='16' y1='16' x2='4' y2='16'/%3E%3Cpolyline points='8,12 4,16 8,20'/%3E%3Cline x1='16' y1='16' x2='16' y2='4'/%3E%3Cpolyline points='12,8 16,4 20,8'/%3E%3Cline x1='16' y1='16' x2='16' y2='28'/%3E%3Cpolyline points='12,24 16,28 20,24'/%3E%3C/g%3E%3C/svg%3E">
     <style>
         *,
         *::before,
@@ -445,7 +447,7 @@
         <!-- Drop Zone -->
         <div id="drop-zone">
             <p class="dz-main">ここに画像をドラッグ＆ドロップ、またはクリックして選択</p>
-            <p class="dz-sub" id="dz-sub-text">変換設定: 横幅1200px | 100KB以下 | JPG形式</p>
+            <p class="dz-sub" id="dz-sub-text">変換設定: 横幅1200px | 150KB以下 | JPG形式</p>
             <input type="file" id="file-input" multiple accept="image/*">
         </div>
         <div id="selected-info"></div>
@@ -512,8 +514,10 @@
         const customWrap = document.getElementById('custom-width-wrap');
         const customWidthInput = document.getElementById('custom-width');
 
-        const TARGET_KB = 100;
-        const MIN_QUALITY = 0.5;
+        const TARGET_KB = 100; // 理想のターゲット
+        const HARD_LIMIT_KB = 150; // 絶対の上限
+        const MIN_QUALITY = 0.5; // 標準的な最低画質
+        const EMERGENCY_QUALITY = 0.1; // 限界画質
         const QUALITY_STEP = 0.05;
 
         let selectedFiles = [];
@@ -575,7 +579,7 @@
             let label = val === 'custom'
                 ? `横幅カスタム指定`
                 : `横幅${val}px (固定)`;
-            dzSub.textContent = `変換設定: ${label} | 100KB以下 | JPG形式`;
+            dzSub.textContent = `変換設定: ${label} | 150KB以下 | JPG形式`;
         }
 
         // ===== Get target width =====
@@ -619,17 +623,29 @@
             return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
         }
 
-        async function compressToTarget(canvas, targetBytes) {
+        async function compressToTarget(canvas, targetBytes, hardLimitBytes) {
             let quality = 1.0;
             let bestBlob = null;
 
+            // 1. まず 100KB (targetBytes) を目標に画質を 0.5 まで下げる
             while (quality >= MIN_QUALITY - 0.001) {
                 const blob = await canvasToBlob(canvas, quality);
                 if (!bestBlob || blob.size < bestBlob.size) bestBlob = blob;
                 if (blob.size <= targetBytes) return { blob, quality };
                 quality = Math.round((quality - QUALITY_STEP) * 100) / 100;
             }
-            return { blob: bestBlob, quality: MIN_QUALITY };
+
+            // 2. 0.5 まで下げても 150KB (hardLimitBytes) を超えている場合はさらに下げる
+            if (bestBlob.size > hardLimitBytes) {
+                while (quality >= EMERGENCY_QUALITY - 0.001) {
+                    const blob = await canvasToBlob(canvas, quality);
+                    if (blob.size < bestBlob.size) bestBlob = blob;
+                    if (blob.size <= hardLimitBytes) return { blob, quality };
+                    quality = Math.round((quality - QUALITY_STEP) * 100) / 100;
+                }
+            }
+
+            return { blob: bestBlob, quality: Math.max(quality, EMERGENCY_QUALITY) };
         }
 
         function changeExt(filename) {
@@ -650,6 +666,7 @@
 
             const targetWidth = getTargetWidth();
             const targetBytes = TARGET_KB * 1024;
+            const hardLimitBytes = HARD_LIMIT_KB * 1024;
 
             processBtn.disabled = true;
             resultsSec.style.display = 'none';
@@ -664,7 +681,7 @@
                 try {
                     const img = await loadImage(file);
                     const { canvas, w, h } = resizeAndConvert(img, targetWidth);
-                    const { blob, quality } = await compressToTarget(canvas, targetBytes);
+                    const { blob, quality } = await compressToTarget(canvas, targetBytes, hardLimitBytes);
                     const outName = changeExt(file.name);
                     const url = URL.createObjectURL(blob);
 
@@ -707,8 +724,8 @@
                     return;
                 }
 
-                const under100 = item.finalSize <= TARGET_KB * 1024;
-                const sizeClass = under100 ? 'size-ok' : 'size-warn';
+                const underLimit = item.finalSize <= HARD_LIMIT_KB * 1024;
+                const sizeClass = underLimit ? 'size-ok' : 'size-warn';
                 const sizeLabel = `${(item.finalSize / 1024).toFixed(1)} KB`;
 
                 row.innerHTML = `
